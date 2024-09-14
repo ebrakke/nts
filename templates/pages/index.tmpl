@@ -1,0 +1,14 @@
+{{ define "content" }}
+<section class="welcome">
+    <h2>Welcome to My Khatru Relay!</h2>
+    <p>A custom Nostr relay using Khatru and SQLite</p>
+</section>
+<section class="info">
+    <h3>Relay Information</h3>
+    <ul>
+        <li><strong>Name:</strong> {{ .Info.Name }}</li>
+        <li><strong>Description:</strong> {{ .Info.Description }}</li>
+        <li><strong>Public Key:</strong> {{ .Info.PubKey }}</li>
+    </ul>
+</section>
+{{ end }}
