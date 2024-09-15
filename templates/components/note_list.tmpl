@@ -1,0 +1,7 @@
+{{define "note_list"}}
+  {{range .}}
+    {{template "note_card" .}}
+  {{else}}
+    <p class="text-gray-500 text-center py-4">No notes found.</p>
+  {{end}}
+{{end}}

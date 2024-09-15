@@ -1,14 +1,15 @@
 {{ define "content" }}
-<section class="welcome">
-    <h2>Welcome to My Khatru Relay!</h2>
-    <p>A custom Nostr relay using Khatru and SQLite</p>
-</section>
-<section class="info">
-    <h3>Relay Information</h3>
-    <ul>
-        <li><strong>Name:</strong> {{ .Info.Name }}</li>
-        <li><strong>Description:</strong> {{ .Info.Description }}</li>
-        <li><strong>Public Key:</strong> {{ .Info.PubKey }}</li>
+<div class="container mx-auto px-4 py-8">
+    <h1 class="text-3xl font-bold mb-6">Notes</h1>
+    
+    <!-- Note form -->
+    <form id="save-note-form" class="mb-8" hx-post="/save-note" hx-target="#noteList" hx-swap="afterbegin">
+        <textarea id="note-content" name="content" class="w-full p-2 border rounded" rows="4" placeholder="Enter your note"></textarea>
+        <button type="submit" class="mt-2 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">Save Note</button>
+    </form>
+    
+    <!-- Note list -->
+    <ul id="noteList" class="space-y-4" hx-get="/fetch-notes" hx-vals='js:{pubkey: window.publicKey}' hx-trigger="load">
     </ul>
-</section>
+</div>
 {{ end }}
