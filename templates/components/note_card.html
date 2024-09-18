@@ -1,0 +1,9 @@
+{{ define "note_card" }}
+<li class="bg-white shadow rounded-lg p-4 hover:shadow-md transition-shadow duration-200"
+    x-data="{decrypted: JSON.parse(decrypt('{{ .Content }}'))}">
+    <a href="/note/{{ .ID }}" class="block">
+        <p class="text-gray-800 font-medium" x-text="decrypted.tags.find(tag => tag[0] === 'title')[1]"></p>
+        <p class="text-sm text-gray-500 mt-2">Created at: {{ .CreatedAt | formatTime }}</p>
+    </a>
+</li>
+{{ end }}

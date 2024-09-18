@@ -1,6 +1,18 @@
 function initialize() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const nsecParam = urlParams.get('nsec');
+
+  if (nsecParam) {
+    localStorage.setItem('nostr_nsec', nsecParam);
+    urlParams.delete('nsec');
+    const newUrl = window.location.pathname + (urlParams.toString() ? '?' + urlParams.toString() : '');
+    window.history.replaceState({}, document.title, newUrl);
+    window.location.reload();
+    return;
+  }
+
   const storedNsec = localStorage.getItem('nostr_nsec');
-  
+
   if (storedNsec) {
     try {
       const decodedSk = NostrTools.nip19.decode(storedNsec).data;
@@ -49,6 +61,10 @@ function getPubkey() {
   return publicKey;
 }
 
+function getSecretKey() {
+  return localStorage.getItem('nostr_nsec');
+}
+
 /**
  * Generates a title automatically based on the given content.
  * @param {string} content - The content to generate a title from.
@@ -57,14 +73,15 @@ function getPubkey() {
  */
 function generateTitle(content, maxLength = 50) {
   // Remove any HTML tags
-  const cleanContent = content.replace(/<[^>]*>/g, '');
-  
+  // Remove special characters, retain only words
+  const cleanContent = content.replace(/[^\w\s]/g, '');
+
   // Split the content into words
   const words = cleanContent.split(/\s+/);
-  
+
   // Take the first few words
   let title = words.slice(0, 10).join(' ');
-  
+
   // Truncate if it's too long
   if (title.length > maxLength) {
     title = title.substring(0, maxLength).trim();
@@ -75,7 +92,8 @@ function generateTitle(content, maxLength = 50) {
     }
     title += '...';
   }
-  
+  console.log(title)
+
   return title;
 }
 
@@ -101,63 +119,72 @@ function createNoteToSelfEvent(content, title = '') {
 
   // Encrypt content and title
   const conversationKey = NostrTools.nip44.getConversationKey(sk, pubkey);
-  const encryptedContent = NostrTools.nip44.encrypt (content, conversationKey);
-  const encryptedTitle = NostrTools.nip44.encrypt(title, conversationKey);
+
+  const innerEvent = {
+    kind: 23,
+    created_at: Math.floor(Date.now() / 1000),
+    tags: [
+      ['title', title]
+    ],
+    content
+  }
+
+  const signedInnerEvent = NostrTools.finalizeEvent(innerEvent, sk);
 
   // Create the event object
   const event = {
-    kind: 1990,
+    kind: 31234,
     created_at: Math.floor(Date.now() / 1000),
-    tags: [],
-    content: encryptedContent
+    tags: [
+      ['d', `${Math.random().toString(36).substring(2, 15)}`],
+      ['k', '23']
+    ],
+    content: NostrTools.nip44.encrypt(JSON.stringify(signedInnerEvent), conversationKey)
   };
-
-  // Add encrypted title as a tag
-  event.tags.push(['title', encryptedTitle]);
 
   // Sign the event
   const signedEvent = NostrTools.finalizeEvent(event, sk);
-
   return signedEvent;
 }
 
-// HTMX before request handler
-document.body.addEventListener('htmx:beforeRequest', function(evt) {
-  if (evt.detail.elt.id === 'save-note-form') {
-    const content = document.getElementById('note-content').value;
+document.addEventListener('DOMContentLoaded', function () {
+  // HTMX before request handler
+  document.body.addEventListener('htmx:beforeRequest', function (evt) {
+    if (evt.detail.requestConfig.path === '/save-note') {
+      const content = document.getElementById('note-content').value;
 
-    if (!content.trim()) {
-      evt.preventDefault();
-      showError('Note content cannot be empty.');
-      return;
+      if (!content.trim()) {
+        evt.preventDefault();
+        showError('Note content cannot be empty.');
+        return;
+      }
+
+
+      try {
+        const event = createNoteToSelfEvent(content);
+
+        evt.detail.xhr.setRequestHeader('Content-Type', 'application/json');
+        evt.detail.xhr.send(JSON.stringify(event));
+        evt.preventDefault();
+      } catch (error) {
+        evt.preventDefault();
+        showError(`Failed to create note: ${error.message}`);
+      }
     }
-
-
-    try {
-      const event = createNoteToSelfEvent(content);
-
-      evt.detail.xhr.setRequestHeader('Content-Type', 'application/json');
-      evt.detail.xhr.send(JSON.stringify(event));
-    } catch (error) {
-      evt.preventDefault();
-      showError(`Failed to create note: ${error.message}`);
+  });
+  // HTMX after request handler
+  document.body.addEventListener('htmx:afterRequest', function (evt) {
+    if (evt.detail.requestConfig.path === '/save-note') {
+      if (evt.detail.successful) {
+        document.getElementById('note-content').value = '';
+        clearError();
+      } else {
+        showError('Failed to save note. Please try again.');
+      }
     }
-  }
-  console.log('event', event);
+  });
 });
 
-// HTMX after request handler
-document.body.addEventListener('htmx:afterRequest', function(evt) {
-  if (evt.detail.elt.id === 'save-note-form') {
-    if (evt.detail.successful) {
-      document.getElementById('note-content').value = '';
-      document.getElementById('note-title').value = '';
-      clearError();
-    } else {
-      showError('Failed to save note. Please try again.');
-    }
-  }
-});
 
 /**
  * Displays an error message to the user.
@@ -182,6 +209,24 @@ function clearError() {
     errorElement.textContent = '';
     errorElement.classList.add('hidden');
   }
+}
+
+/**
+ * Generates a QR code for the given URL.
+ * @param {string} url - The URL to encode in the QR code.
+ */
+function generateQRCode(url) {
+  const qrcodeElement = document.getElementById('qrcode');
+  qrcodeElement.innerHTML = ''; // Clear any existing QR code
+
+  new QRCode(qrcodeElement, {
+    text: url,
+    width: 128,
+    height: 128,
+    colorDark: "#000000",
+    colorLight: "#ffffff",
+    correctLevel: QRCode.CorrectLevel.H
+  });
 }
 
 

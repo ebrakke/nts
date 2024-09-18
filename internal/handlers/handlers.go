@@ -3,16 +3,18 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"html/template"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/fiatjaf/khatru"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/nbd-wtf/go-nostr/nip11"
 )
 
-func HomeHandler(tmpl *template.Template, info *nip11.RelayInformationDocument) http.HandlerFunc {
+func HomeHandler(info *nip11.RelayInformationDocument, templates map[string]*template.Template) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		slog.Info("Handling request for Home page", "remote_addr", r.RemoteAddr)
 
@@ -24,7 +26,7 @@ func HomeHandler(tmpl *template.Template, info *nip11.RelayInformationDocument) 
 			Info:  *info,
 		}
 
-		if err := tmpl.ExecuteTemplate(w, "base.tmpl", data); err != nil {
+		if err := templates["homePage"].ExecuteTemplate(w, "base.html", data); err != nil {
 			slog.Error("Error executing template", "error", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -34,7 +36,7 @@ func HomeHandler(tmpl *template.Template, info *nip11.RelayInformationDocument) 
 	}
 }
 
-func SaveNoteHandler(tmpl *template.Template, relay *khatru.Relay) http.HandlerFunc {
+func SaveNoteHandler(relay *khatru.Relay, templates map[string]*template.Template) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		slog.Info("Handling SaveNote request", "remote_addr", r.RemoteAddr)
 
@@ -49,7 +51,7 @@ func SaveNoteHandler(tmpl *template.Template, relay *khatru.Relay) http.HandlerF
 		slog.Info("Received note event", "event", event)
 
 		// Validate the event
-		if event.Kind != 1990 || event.Content == "" {
+		if event.Kind != 31234 || event.Content == "" {
 			slog.Warn("Invalid note event", "kind", event.Kind, "content", event.Content)
 			http.Error(w, "Invalid note event", http.StatusBadRequest)
 			return
@@ -66,7 +68,7 @@ func SaveNoteHandler(tmpl *template.Template, relay *khatru.Relay) http.HandlerF
 		slog.Info("Note saved successfully to relay")
 
 		// Render only the new note card
-		err = tmpl.ExecuteTemplate(w, "note_card", event)
+		err = templates["note_card"].ExecuteTemplate(w, "note_card", event)
 		if err != nil {
 			http.Error(w, "Error rendering note card", http.StatusInternalServerError)
 			return
@@ -74,7 +76,7 @@ func SaveNoteHandler(tmpl *template.Template, relay *khatru.Relay) http.HandlerF
 	}
 }
 
-func FetchNotes(tmpl *template.Template, relay *khatru.Relay) http.HandlerFunc {
+func FetchNotes(relay *khatru.Relay, templates map[string]*template.Template) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		pubkey := r.URL.Query().Get("pubkey")
 		if pubkey == "" {
@@ -84,7 +86,7 @@ func FetchNotes(tmpl *template.Template, relay *khatru.Relay) http.HandlerFunc {
 
 		// Fetch notes for the given pubkey
 		notesChan, err := relay.QueryEvents[0](context.Background(), nostr.Filter{
-			Kinds:   []int{1990},
+			Kinds:   []int{31234},
 			Authors: []string{pubkey},
 			Limit:   20,
 		})
@@ -101,11 +103,54 @@ func FetchNotes(tmpl *template.Template, relay *khatru.Relay) http.HandlerFunc {
 			allNotes = append(allNotes, note)
 		}
 
+		tmpl := templates["note_list"]
+
 		// Render the notes using the note_list template
 		err = tmpl.ExecuteTemplate(w, "note_list", allNotes)
 		if err != nil {
+			fmt.Println(err)
 			slog.Error("Failed to render notes", "error", err)
 			http.Error(w, "Failed to render notes", http.StatusInternalServerError)
+			return
+		}
+	}
+}
+
+func FetchSingleNote(relay *khatru.Relay, templates map[string]*template.Template) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		eventID := strings.TrimPrefix(r.URL.Path, "/note/")
+
+		filter := nostr.Filter{
+			IDs: []string{eventID},
+		}
+
+		events, err := relay.QueryEvents[0](context.Background(), filter)
+		if err != nil {
+			http.Error(w, "Failed to fetch note", http.StatusInternalServerError)
+			return
+		}
+
+		var allEvents []*nostr.Event
+		for event := range events {
+			allEvents = append(allEvents, event)
+		}
+
+		if len(allEvents) == 0 {
+			http.NotFound(w, r)
+			return
+		}
+
+		data := struct {
+			Title string
+			Note  *nostr.Event
+		}{
+			Title: "Note",
+			Note:  allEvents[0],
+		}
+		err = templates["notePage"].ExecuteTemplate(w, "base.html", data)
+		if err != nil {
+			slog.Error("Failed to render template", "error", err)
+			http.Error(w, "Failed to render template", http.StatusInternalServerError)
 			return
 		}
 	}

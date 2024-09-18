@@ -1,6 +1,0 @@
-{{ define "note_card" }}
-<li class="bg-white shadow rounded-lg p-4">
-    <p class="text-gray-800" x-text="decrypt('{{ . | getTitle }}')"></p>
-    <p class="text-sm text-gray-500 mt-2">Created at: {{ .CreatedAt | formatTime }}</p>
-</li>
-{{ end }}
