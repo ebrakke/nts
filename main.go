@@ -3,6 +3,7 @@ package main
 import (
 	"embed"
 	"html/template"
+	"log"
 	"log/slog"
 	"net/http"
 	"os"
@@ -11,7 +12,7 @@ import (
 	"nts/internal/handlers"
 	"nts/internal/middleware"
 
-	"github.com/fiatjaf/eventstore/sqlite3"
+	"github.com/fiatjaf/eventstore/postgresql"
 	"github.com/fiatjaf/khatru"
 	"github.com/joho/godotenv"
 	"github.com/nbd-wtf/go-nostr"
@@ -79,11 +80,11 @@ func main() {
 	// Initialize SQLite database
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
-		dbURL = "khatru.db"
+		log.Fatal("DATABASE_URL is not set")
 	}
-	db := sqlite3.SQLite3Backend{DatabaseURL: dbURL}
+	db := postgresql.PostgresBackend{DatabaseURL: dbURL}
 	if err := db.Init(); err != nil {
-		slog.Error("Failed to initialize SQLite database", "error", err)
+		slog.Error("Failed to initialize PostgreSQL database", "error", err)
 		os.Exit(1)
 	}
 

@@ -17,6 +17,7 @@ import (
 func HomeHandler(info *nip11.RelayInformationDocument, templates map[string]*template.Template) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		slog.Info("Handling request for Home page", "remote_addr", r.RemoteAddr)
+		fmt.Println(r.URL.Query().Encode())
 
 		data := struct {
 			Title string

@@ -1,10 +1,13 @@
 function initialize() {
   const urlParams = new URLSearchParams(window.location.search);
-  const nsecParam = urlParams.get('nsec');
+  const ncryptParam = urlParams.get('ncrypt');
 
-  if (nsecParam) {
-    localStorage.setItem('nostr_nsec', nsecParam);
-    urlParams.delete('nsec');
+  if (ncryptParam) {
+    const password = prompt('Enter password');
+    const sk = NostrIdentitySDK.nip49.decrypt(atob(ncryptParam), password);
+    const nsec = NostrIdentitySDK.nip19.nsecEncode(sk);
+    localStorage.setItem('nostr_nsec', nsec);
+    urlParams.delete('ncrypt');
     const newUrl = window.location.pathname + (urlParams.toString() ? '?' + urlParams.toString() : '');
     window.history.replaceState({}, document.title, newUrl);
     window.location.reload();
@@ -15,8 +18,8 @@ function initialize() {
 
   if (storedNsec) {
     try {
-      const decodedSk = NostrTools.nip19.decode(storedNsec).data;
-      window.publicKey = NostrTools.getPublicKey(decodedSk);
+      const decodedSk = NostrIdentitySDK.nip19.decode(storedNsec).data;
+      window.publicKey = NostrIdentitySDK.getPublicKey(decodedSk);
       console.log('Loaded existing key');
     } catch (error) {
       console.error('Error decoding stored nsec:', error);
@@ -28,10 +31,10 @@ function initialize() {
 }
 
 function generateNewKey() {
-  const sk = NostrTools.generateSecretKey();
-  const nsec = NostrTools.nip19.nsecEncode(sk);
+  const sk = NostrIdentitySDK.generateSecretKey();
+  const nsec = NostrIdentitySDK.nip19.nsecEncode(sk);
   localStorage.setItem('nostr_nsec', nsec);
-  publicKey = NostrTools.getPublicKey(sk);
+  publicKey = NostrIdentitySDK.getPublicKey(sk);
   console.log('Generated new key');
 }
 
@@ -51,9 +54,9 @@ function decrypt(encryptedString) {
     throw new Error('No secret key found. Please initialize the key first.');
   }
 
-  const sk = NostrTools.nip19.decode(storedNsec).data;
-  const sharedKey = NostrTools.nip44.getConversationKey(sk, publicKey);
-  const decrypted = NostrTools.nip44.decrypt(encryptedString, sharedKey);
+  const sk = NostrIdentitySDK.nip19.decode(storedNsec).data;
+  const sharedKey = NostrIdentitySDK.nip44.getConversationKey(sk, publicKey);
+  const decrypted = NostrIdentitySDK.nip44.decrypt(encryptedString, sharedKey);
   return decrypted;
 }
 
@@ -61,7 +64,7 @@ function getPubkey() {
   return publicKey;
 }
 
-function getSecretKey() {
+function getNsec() {
   return localStorage.getItem('nostr_nsec');
 }
 
@@ -109,8 +112,8 @@ function createNoteToSelfEvent(content, title = '') {
     throw new Error('No secret key found. Please initialize the key first.');
   }
 
-  const sk = NostrTools.nip19.decode(storedNsec).data;
-  const pubkey = NostrTools.getPublicKey(sk);
+  const sk = NostrIdentitySDK.nip19.decode(storedNsec).data;
+  const pubkey = NostrIdentitySDK.getPublicKey(sk);
 
   // Generate title if not provided
   if (!title) {
@@ -118,7 +121,7 @@ function createNoteToSelfEvent(content, title = '') {
   }
 
   // Encrypt content and title
-  const conversationKey = NostrTools.nip44.getConversationKey(sk, pubkey);
+  const conversationKey = NostrIdentitySDK.nip44.getConversationKey(sk, pubkey);
 
   const innerEvent = {
     kind: 23,
@@ -129,7 +132,7 @@ function createNoteToSelfEvent(content, title = '') {
     content
   }
 
-  const signedInnerEvent = NostrTools.finalizeEvent(innerEvent, sk);
+  const signedInnerEvent = NostrIdentitySDK.finalizeEvent(innerEvent, sk);
 
   // Create the event object
   const event = {
@@ -139,11 +142,11 @@ function createNoteToSelfEvent(content, title = '') {
       ['d', `${Math.random().toString(36).substring(2, 15)}`],
       ['k', '23']
     ],
-    content: NostrTools.nip44.encrypt(JSON.stringify(signedInnerEvent), conversationKey)
+    content: NostrIdentitySDK.nip44.encrypt(JSON.stringify(signedInnerEvent), conversationKey)
   };
 
   // Sign the event
-  const signedEvent = NostrTools.finalizeEvent(event, sk);
+  const signedEvent = NostrIdentitySDK.finalizeEvent(event, sk);
   return signedEvent;
 }
 
@@ -221,12 +224,34 @@ function generateQRCode(url) {
 
   new QRCode(qrcodeElement, {
     text: url,
-    width: 128,
-    height: 128,
+    width: 256,
+    height: 256,
     colorDark: "#000000",
     colorLight: "#ffffff",
     correctLevel: QRCode.CorrectLevel.H
   });
 }
 
+/**
+ * Clears the user's key from localStorage after confirmation.
+ * Refreshes the page after clearing the key.
+ */
+function clearKey() {
+  if (confirm("Are you sure you want to reset? This action cannot be undone.")) {
+    localStorage.removeItem('nostr_nsec');
+    location.href = '/';
+  }
+}
+
+function generateShareUrl(password) {
+  const nsec = getNsec();
+  console.log(nsec, password);
+  if (!nsec) {
+    return '';
+  }
+  const sk = NostrIdentitySDK.nip19.decode(nsec).data;
+  const shareUrl = window.location.href + '?ncrypt=' + btoa(NostrIdentitySDK.nip49.encrypt(sk, password));
+  console.log(shareUrl);
+  return shareUrl;
+}
 
